@@ -1,0 +1,211 @@
+#+TITLE: Internet Computer Protocol (ICP) Tokens
+
+This document describes use cases for interacting with Internet Computer
+Protocol (ICP) tokens.
+
+Ideally this document is used with Nix, Emacs and Org-mode -- and maybe even
+direnv and emacs-direnv -- by running the following:
+
+#+begin_src sh
+nix-shell
+emacs &
+#+end_src
+
+This should permit you to evaluate code blocks throughout the file, which you
+should do one by one, in sequence to ensure that everything is working
+correctly. Make sure to do this on an encrypted volume, using an air-gapped
+computer, and keep all generated files from the view of anyone else afterward.
+
+* Key management
+:PROPERTIES:
+:session:  keysmith
+:END:
+
+** Generate your mnemonic seed
+
+This seed is essential. Keep it safe and share it with no one, since
+everything else about your account, including your private keys, are all
+derived from it. Keep it secret; keep it safe!
+
+#+begin_src sh :results drawer
+[[ -f seed.txt ]] || keysmith generate -o seed.txt
+wc seed.txt
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+
+ 1 12 77 seed.txt
+:END:
+
+** Create a private key
+
+You may have as many private keys as you like, all derived from the same seed.
+This way you can create special purpose keys with a separate account, giving
+you the ability to share part of your token balance with another person --
+where you both have control through that private key, but without giving up
+your seed or control of any of your other accounts.
+
+#+begin_src sh :results drawer
+[[ -f private.pem ]] || keysmith private-key -o private.pem
+wc private.pem
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+
+  8  18 294 private.pem
+:END:
+
+*** Create a secondary private key
+
+To create another private key derived from the same seed, use =-i N= to specify
+the derivation index.
+
+#+begin_src sh :results drawer
+[[ -f private1.pem ]] || keysmith private-key -i 1 -o private1.pem
+wc private1.pem
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+
+  8  18 294 private1.pem
+:END:
+
+** Create a public key
+
+#+begin_src sh :results drawer
+keysmith public-key -i 0
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+04e5669c8c9c8225080f341c40a349214c19af3b29764b6609b4dbeecb72d8a427f4ce0e69524b5247ab3a7bc8772d65a2718c1d2da8c676a69cb74534949b1fc1
+:END:
+
+*** Create a secondary public key
+
+To create a public key derived from a secondary private key, use =-i N= to
+specify the derivation index.
+
+#+begin_src sh :results drawer
+keysmith public-key -i 1
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+041f0fb438b498805f3f26f1ddd5a34189578d7062f1b521d0460e892217f98ebd4897d5151f849101ee9de5009ac33601c9847d57deae51a25c7de1a48f7351cb
+:END:
+
+** Display your principal id
+
+#+begin_src sh :results drawer
+keysmith principal -i 0
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+spzei-66nfr-viuvp-7amfu-viajp-6ygjx-2sehd-p3r5e-vwzrm-t44na-gae
+:END:
+
+** Display your account id
+
+Note that each seed has multiple associated accounts, indexed using =-i= (with 0
+being the default).
+
+#+begin_src sh :results drawer
+keysmith account -i 0
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+a0a8178a7e97840a643162583f331bce6ea4f4ff06287d3d608e53756145c9a3
+:END:
+
+* Using dfx to interact with the IC
+
+** Import identity from private key
+
+#+NAME: name
+#+begin_src sh :results drawer
+NAME=johnw
+(dfx identity list | grep -q $NAME) || \
+    dfx identity import $NAME identity.pem
+dfx identity list | grep $NAME
+#+end_src
+
+#+RESULTS: name
+:RESULTS:
+johnw
+:END:
+
+** Set which identity to use by default (optional)
+
+#+begin_src sh :results drawer :var NAME=name
+dfx identity use $NAME
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+:END:
+
+** Ensure account ids match
+
+#+NAME: account
+#+begin_src sh :results drawer :var NAME=name
+ACCOUNT=$(dfx --identity $NAME ledger account-id)
+if [[ $ACCOUNT != $(keysmith account) ]]; then
+    echo "MISMATCH! Make sure you are using the right identity"
+    exit 1
+else
+    echo $ACCOUNT
+fi
+#+end_src
+
+#+RESULTS: account
+:RESULTS:
+a0a8178a7e97840a643162583f331bce6ea4f4ff06287d3d608e53756145c9a3
+:END:
+
+** Check token balance
+
+#+begin_src sh :results drawer :var NAME=name :var ACCOUNT=account
+echo ICP balance for account $ACCOUNT
+dfx --identity $NAME ledger --network=https://ic0.app \
+    balance $ACCOUNT
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+ICP balance for account a0a8178a7e97840a643162583f331bce6ea4f4ff06287d3d608e53756145c9a3
+0.00000000 ICP
+:END:
+
+** Transfer tokens
+
+#+begin_src sh :results drawer :var NAME=name
+TO=12345678
+MEMO=12345678
+AMOUNT=0
+dfx --identity $NAME ledger --network=https://ic0.app \
+    transfer $TO --memo $MEMO --amount $AMOUNT
+#+end_src
+
+#+RESULTS:
+:RESULTS:
+:END:
+
+* Interacting with Coinbase Pro
+
+** Deposit and withdrawals
+
+In order to send ICP to Coinbase Pro, you'll need an account number we can
+pass to =dfx ledger transfer=. Instructions can be found [[https://dfinity.us16.list-manage.com/track/click?u=33c727489e01ff5b6e1fb6cc6&id=a4ad8bb1af&e=60d1e85c26][here]].
+
+In order to receive ICP from Coinbase Pro, you'll need to add your account
+number to your [[https://pro.coinbase.com/profile/address-book][address book]], and then withdraw ICP tokens to that account.
+
+* Colophon
+#+STARTUP: content fninline hidestars
+#+OPTIONS: ^:{}
